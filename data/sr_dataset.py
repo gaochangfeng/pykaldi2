@@ -153,7 +153,7 @@ class SpeechDataset(data.Dataset):
                                                             is_rir=is_rir,
                                                             get_duration=False,
                                                             corpus_name=corpus_type,
-                                                            file_extension='wav')
+                                                            file_extension='flac')
             source_streams.append(curr_stream)
 
         return source_streams
