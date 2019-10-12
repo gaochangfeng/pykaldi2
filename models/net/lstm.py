@@ -54,19 +54,6 @@ class LSTMStack(nn.Module):
         return output, (h,c)
 
 
-class NnetAM(nn.Module):
-    
-    def __init__(self, nnet, hidden_size, output_size):
-        super(NnetAM, self).__init__()
 
-        self.nnet = nnet
-        self.output_size = output_size
-        self.output_layer = nn.Linear(hidden_size, output_size)
-
-    def forward(self, data):
-        nnet_output, (h,c) = self.nnet(data)
-        output = self.output_layer(nnet_output)
-
-        return output
 
 

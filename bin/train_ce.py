@@ -37,7 +37,7 @@ import torch.nn as nn
 
 from reader.preprocess import GlobalMeanVarianceNormalization
 from data import SpeechDataset, ChunkDataloader, SeqDataloader
-from models import LSTMStack, NnetAM
+from models import LSTMStack, NnetAM, LSTMnetAM
 from utils import utils
 
 
@@ -113,7 +113,7 @@ def main():
     # ceate model
     model_config = config["model_config"]
     lstm = LSTMStack(model_config["feat_dim"], model_config["hidden_size"], model_config["num_layers"], model_config["dropout"], True)
-    model = NnetAM(lstm, model_config["hidden_size"]*2, model_config["label_size"])
+    model = LSTMnetAM(model_config["feat_dim"], model_config["hidden_size"], model_config["num_layers"], model_config["dropout"], True, model_config["label_size"])
 
     # Start training
     th.backends.cudnn.enabled = True

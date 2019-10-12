@@ -1,1 +1,3 @@
-from .lstm import LSTMStack, NnetAM
+from .netam import NnetAM
+from .netam import LSTMnetAM
+from .net.lstm import LSTMStack
