@@ -147,6 +147,7 @@ def main():
         print("=> loaded checkpoint '{}' ".format(args.resume_from_model))
 
     model.train()
+    run_time = 0
     for epoch in range(start_epoch, args.num_epochs):
 
          # aneal learning rate
@@ -154,7 +155,7 @@ def main():
             for param_group in optimizer.param_groups:
                 param_group['lr'] *= args.anneal_lr_ratio
 
-        run_train_epoch(model, optimizer, criterion, train_dataloader, epoch, args)
+        run_time,loss = run_train_epoch(model, optimizer, criterion, train_dataloader, epoch, args)
 
         # save model
         if not args.hvd or hvd.rank()== 0:
@@ -164,6 +165,9 @@ def main():
             checkpoint['epoch']=epoch
             output_file=args.exp_dir + '/model.'+ str(epoch) +'.tar'
             th.save(checkpoint, output_file)
+            with open(args.exp_dir+'/run.log','a') as f:
+                s = 'epoch%d: Time %6.3f Loss %.4e' % (epoch, run_time, loss)
+                f.write(s)
 
 def run_train_epoch(model, optimizer, criterion, train_dataloader, epoch, args):
     batch_time = utils.AverageMeter('Time', ':6.3f')
@@ -173,6 +177,7 @@ def run_train_epoch(model, optimizer, criterion, train_dataloader, epoch, args):
     progress = utils.ProgressMeter(len(train_dataloader), batch_time, losses, grad_norm,
                              prefix="Epoch: [{}]".format(epoch))
 
+    start = time.time()
     end = time.time()
     # trainloader is an iterator. This line extract one minibatch at one time
     for i, data in enumerate(train_dataloader, 0):
@@ -207,6 +212,7 @@ def run_train_epoch(model, optimizer, criterion, train_dataloader, epoch, args):
         if i % args.print_freq == 0:
     #        if not args.hvd or hvd.rank() == 0:
             progress.print(i)
+    return time.time()-end,losses.avg
 
 if __name__ == '__main__':
     main()
