@@ -31,13 +31,13 @@ import sys
 import time
 import json
 import pickle
-
 import torch as th
 import torch.nn as nn
-
 from reader.preprocess import GlobalMeanVarianceNormalization
 from data import SpeechDataset, ChunkDataloader, SeqDataloader
-from models import LSTMStack, NnetAM, LSTMnetAM
+from models.genmodel import GenerateModel
+from models.criterion.cross_entropy import SeqCrossEntorpy
+from bin.tools.trainer import Trainer
 from utils import utils
 
 
@@ -47,6 +47,7 @@ def main():
     parser.add_argument("-dataPath", default='', type=str, help="path of data files")
     parser.add_argument("-train_config")
     parser.add_argument("-data_config")
+    parser.add_argument("-model", type=str, default="models.LSTMnetAM", help="the model from which you want to resume training")
     parser.add_argument("-lr", default=0.0001, type=float, help="Override the LR in the config")
     parser.add_argument("-batch_size", default=32, type=int, help="Override the batch size in the config")
     parser.add_argument("-data_loader_threads", default=0, type=int, help="number of workers for data loading")
@@ -112,8 +113,7 @@ def main():
 
     # ceate model
     model_config = config["model_config"]
-    model = LSTMnetAM(model_config["feat_dim"], model_config["hidden_size"], model_config["num_layers"], model_config["dropout"], True, model_config["label_size"])
-
+    model = GenerateModel(model_config)
     # Start training
     th.backends.cudnn.enabled = True
     if th.cuda.is_available():
@@ -131,8 +131,8 @@ def main():
         optimizer = hvd.DistributedOptimizer(optimizer, named_parameters=model.named_parameters())
 
     # criterion
-    criterion = nn.CrossEntropyLoss(ignore_index=-100)
-
+    criterion = SeqCrossEntorpy(ignore_index=-100)
+    trainer = Trainer(model,criterion,optimizer)
     start_epoch = 0
     if args.resume_from_model:
 
@@ -145,15 +145,14 @@ def main():
         optimizer.load_state_dict(checkpoint['optimizer'])
         print("=> loaded checkpoint '{}' ".format(args.resume_from_model))
 
-    model.train()
     for epoch in range(start_epoch, args.num_epochs):
 
          # aneal learning rate
         if epoch > args.anneal_lr_epoch:
-            for param_group in optimizer.param_groups:
+            for param_group in trainer.optimizer.param_groups:
                 param_group['lr'] *= args.anneal_lr_ratio
 
-        run_train_epoch(model, optimizer, criterion, train_dataloader, epoch, args)
+        run_train_epoch(trainer, train_dataloader, epoch, args)
 
         # save model
         if not args.hvd or hvd.rank()== 0:
@@ -164,9 +163,8 @@ def main():
             output_file=args.exp_dir + '/model.'+ str(epoch) +'.tar'
             th.save(checkpoint, output_file)
 
-def run_train_epoch(model, optimizer, criterion, train_dataloader, epoch, args):
+def run_train_epoch(trainer, train_dataloader, epoch, args):
     batch_time = utils.AverageMeter('Time', ':6.3f')
-    #data_time = utils.AverageMeter('Data', ':6.3f')
     losses = utils.AverageMeter('Loss', ':.4e')
     grad_norm = utils.AverageMeter('grad_norm', ':.4e')
     progress = utils.ProgressMeter(len(train_dataloader), batch_time, losses, grad_norm,
@@ -185,26 +183,10 @@ def run_train_epoch(model, optimizer, criterion, train_dataloader, epoch, args):
             x = x.cuda()
             y = y.cuda()
 
-        prediction = model(x)
-        loss = criterion(prediction.view(-1, prediction.shape[2]), y.view(-1))
-
-        optimizer.zero_grad()
-        loss.backward()
-
-        # Gradient Clipping
-        norm = nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
-        optimizer.step()
-
-        grad_norm.update(norm)
-
-        # update loss
+        loss = trainer.train_batch(x,y)
         losses.update(loss.item(), x.size(0))
-
-        # measure elapsed time
         batch_time.update(time.time() - end)
-
         if i % args.print_freq == 0:
-    #        if not args.hvd or hvd.rank() == 0:
             progress.print(i)
 
 if __name__ == '__main__':

@@ -3,7 +3,8 @@ import sys
 import numpy as np
 import torch as th
 import torch.nn as nn
-from .import LSTMStack
+from .net.lstm import LSTMStack
+from .net.transformer.encoder import Encoder as TransformerEncoder
 
 class BaseAM(nn.Module):
     def forward(self,data):
@@ -31,6 +32,12 @@ class NnetAM(BaseAM):
 
         return output
 
+    def recognize(self,data):
+        output = self.forward(data)
+        output = th.softmax(output)
+
+        return output
+
 
 class LSTMnetAM(BaseAM):
 
@@ -50,3 +57,30 @@ class LSTMnetAM(BaseAM):
         output = self.output_layer(nnet_output)
 
         return output
+
+class TransformerAN(BaseAM):
+    
+    def __init__(self, input_size, hidden_size, linear_units, heads, num_layers, dropout, output_size):
+        super(TransformerAN, self).__init__()
+        self.trans = TransformerEncoder(idim=input_size,
+                 attention_dim=hidden_size,
+                 attention_heads=heads,
+                 linear_units=linear_units,
+                 num_blocks=num_layers,
+                 dropout_rate=dropout,
+                 positional_dropout_rate=dropout,
+                 attention_dropout_rate=0.0,
+                 input_layer="linear"
+        )
+        self.output_layer = nn.Linear(hidden_size, output_size)
+
+    def forward(self,data,mask=None):
+        output,mask = self.trans(data,mask)
+        output = self.output_layer(output)
+        return output,mask
+
+    def recognize(self,data,mask):
+        output,mask = self.forward(data,mask)
+        output = th.softmax(output)
+
+        return output,mask
