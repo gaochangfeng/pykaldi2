@@ -123,6 +123,7 @@ class SeqDataloader(DataLoader):
 
         else:
             feats, utt_ids, labels, aux = zip(*batch)
+            print(utt_ids,feats,labels,aux)
             labels, num_labs = pad_and_concat_labels(labels)
             feats, num_frs = pad_and_concat_feats(feats)
             assert num_labs == num_frs, "The numbers of frames and labels are not equal"

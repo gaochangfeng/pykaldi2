@@ -27,11 +27,22 @@ class Trainer(torch.nn.Module):
         # Gradient Clipping
         #norm = nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
         self.optimizer.step()
-        self._update_opt()
 
-    def _update_opt(self,func=None):
+    def update_opt(self,func,*arg,**args):
         if func is None:
             return
         else:
             #应该可以用@函数实现，func其他参数的确认
-            self.optimizer = func(self.optimizer)
+            self.optimizer = func(self.optimizer,*arg,**args)
+
+
+def update_opt_func(fn):
+    '''
+        优化器更新函数的修饰器，update_opt只能接受被该函数修饰的函数
+        被修饰的函数一定要返回一个优化器的类
+    '''
+    def updata(optimizer,*args,**kwargs):
+        if not isinstance(optimizer,torch.optim.Optimizer):
+            raise TypeError("update_opt only accept torch.optim.Optimizer as the first parameter")
+        return fn(optimizer,*args,**kwargs)
+    return updata

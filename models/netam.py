@@ -34,7 +34,7 @@ class NnetAM(BaseAM):
 
     def recognize(self,data):
         output = self.forward(data)
-        output = th.softmax(output)
+        output = th.log_softmax(output)
 
         return output
 
@@ -77,10 +77,10 @@ class TransformerAN(BaseAM):
     def forward(self,data,mask=None):
         output,mask = self.trans(data,mask)
         output = self.output_layer(output)
-        return output,mask
+        return output
 
-    def recognize(self,data,mask):
-        output,mask = self.forward(data,mask)
-        output = th.softmax(output)
+    def recognize(self,data,mask=None):
+        output = self.forward(data,mask)
+        output = th.log_softmax(output,-1)
 
-        return output,mask
+        return output
