@@ -52,11 +52,6 @@ class FeatDataSet(data.Dataset):
                 label_names.append('label')
             else:
                 corpus_label_path = None
-            if 'aux_label' in source_list[i]:
-                label_paths.append(data_path+source_list[i]['aux_label'])
-                label_names.append('aux_label')
-            else:
-                corpus_label_path = None
             print("%s::_load_streams: loading %s from %s..." % (self.__class__.__name__, corpus_type, corpus_wav_path))
             utt_name, feat_data = zip(*read_mat_scp(corpus_wav_path))
             utt_id_wav.append(utt_name)
@@ -131,6 +126,7 @@ class SeqFeatDataSet(data.Dataset):
     def load_ark_file(self,config):
         print("load")
         utt_id_wav,utt_data_wav,utt_label_wav,utt_aux_wav = self._load_streams(config["source_paths"], config['data_path'], is_speech=True, is_rir=False)
+        print(len(utt_id_wav),len(utt_data_wav),len(utt_label_wav),len(utt_aux_wav))
         for i in range(len(utt_id_wav)):
             for j in range(len(utt_data_wav[i])):
                 self.train_samples.append([utt_data_wav[i][j],utt_id_wav[i][j],utt_label_wav[i][j].T,utt_aux_wav[i][j].T])
@@ -184,7 +180,7 @@ class SeqFeatDataSet(data.Dataset):
             lines.sort()        # each lines start with utterance ID, hence effectively sort the labels with utterance ID.
             curr_utt_id_label = [i.split(" ")[0] for i in lines]
             selected_utt_id = set(curr_utt_id_label) & given_utt_id
-            print("select utt:",len(selected_utt_id))
+            print("select aux utt:",len(selected_utt_id))
             if len(selected_utt_id)!=len(given_utt_id):
                 print(given_utt_id-selected_utt_id,"is not exist in label file")
             selected_label_list = get_label(lines,selected_utt_id)          

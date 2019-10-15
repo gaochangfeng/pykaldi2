@@ -12,20 +12,20 @@ class Trainer(torch.nn.Module):
         self.model.train()
         return self.model(data,*arg,**args)
 
-    def train_batch(self,data,label,*arg,**args):
+    def train_batch(self,data,label,*arg,max_grad_norm=5,**args):
         out = self.forward(data,*arg,**args)
         loss = self.loss_fn(out,label,*arg,**args)
-        self._backward(loss)
+        self._backward(loss,max_grad_norm)
         return loss
 
-    def _backward(self,loss):
+    def _backward(self,loss,max_grad_norm):
         '''
             you can override this method to realize different trainer
         '''
         self.optimizer.zero_grad()
         loss.backward()
         # Gradient Clipping
-        #norm = nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_grad_norm)
         self.optimizer.step()
 
     def update_opt(self,func,*arg,**args):

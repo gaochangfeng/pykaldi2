@@ -55,7 +55,12 @@ class LSTMnetAM(BaseAM):
     def forward(self, data):
         nnet_output, (h,c) = self.lstm(data)
         output = self.output_layer(nnet_output)
+        return output
 
+    def recognize(self, data):
+        output = self.forward(data)
+        print(output.size())
+        output = th.log_softmax(output,-1)
         return output
 
 class TransformerAN(BaseAM):

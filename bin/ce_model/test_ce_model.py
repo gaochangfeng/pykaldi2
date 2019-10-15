@@ -139,7 +139,7 @@ def main():
         acc_list.append(acc)
         logger.info("batch %d:%f"%(i,acc))
     all_acc = np.mean(acc_list)
-    logger.info("all:%f\n"%(acc))
+    logger.info("all:%f\n"%(all_acc))
 
 if __name__ == '__main__':
     main()

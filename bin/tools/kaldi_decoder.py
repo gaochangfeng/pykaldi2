@@ -1,7 +1,6 @@
 from __future__ import print_function
 from kaldi.asr import MappedLatticeFasterRecognizer
 from kaldi.decoder import LatticeFasterDecoderOptions
-from kaldi.itf import DecodableInterface
 from kaldi.matrix import Matrix
 from kaldi.util.table import SequentialMatrixReader
 
@@ -19,9 +18,9 @@ class Kaldi_Decoder(object):
         # Decode log-likelihoods represented as numpy ndarrays.
         # Useful for decoding with non-kaldi acoustic models.
         loglikes = model.recognize(feat,*arg,**args)
-        out = self.asr.decode(Matrix(loglikes))
+        out = self.asr.decode(Matrix(loglikes.detach().cpu().numpy()))
         return out
 
-    def decode_loglike(self,model,loglikes):
-        out = self.asr.decode(loglikes)
+    def decode_loglike(self,loglikes):
+        out = self.asr.decode(Matrix(loglikes))
         return out
