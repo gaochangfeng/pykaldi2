@@ -131,7 +131,7 @@ def main():
         feat = data["x"]
         label = data["y"]
         x = feat.to(th.float32)
-        y = label.unsqueeze(2).int()
+        y = label.squeeze(2).int()
         if th.cuda.is_available():
             x = x.cuda()
             y = y.cuda()

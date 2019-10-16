@@ -17,7 +17,6 @@ class Tester(torch.nn.Module):
 
     def forward(self,data,*arg,**args):
         self.model.eval()
-        print(data.size())
         if hasattr(self.model, 'recognize'):
             out = self.model.recognize(data,*arg,**args)
         else:

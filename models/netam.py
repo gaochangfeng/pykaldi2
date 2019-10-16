@@ -59,7 +59,6 @@ class LSTMnetAM(BaseAM):
 
     def recognize(self, data):
         output = self.forward(data)
-        print(output.size())
         output = th.log_softmax(output,-1)
         return output
 
