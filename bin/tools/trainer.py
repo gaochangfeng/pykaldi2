@@ -25,7 +25,8 @@ class Trainer(torch.nn.Module):
         self.optimizer.zero_grad()
         loss.backward()
         # Gradient Clipping
-        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_grad_norm)
+        if max_grad_norm != 0:
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_grad_norm)
         self.optimizer.step()
 
     def update_opt(self,func,*arg,**args):

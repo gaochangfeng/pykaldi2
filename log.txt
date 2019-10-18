@@ -1,0 +1,1 @@
+2019-10-13 15:44:52,586 - mylog - INFO - my information
