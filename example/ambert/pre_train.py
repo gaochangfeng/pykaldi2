@@ -31,27 +31,15 @@ import sys
 import time
 import json
 import pickle
+
 import torch as th
 import torch.nn as nn
+
 from reader.preprocess import GlobalMeanVarianceNormalization
 from data import SpeechDataset, ChunkDataloader, SeqDataloader, FeatDataSet
-from models.genmodel import GenerateModel
-from models.criterion.cross_entropy import SeqCrossEntorpy
-from bin.tools.trainer import Trainer,update_opt_func
+from models import LSTMStack, NnetAM, LSTMnetAM
 from utils import utils,FileLogger
-
-@update_opt_func
-def opt_updata(optimizer,rate):
-    for param_group in optimizer.param_groups:
-        param_group['lr'] *= rate
-    return optimizer
-
-class Chunk_Trainer(Trainer):
-    def train_batch(self,data,label,l,c,r,*arg,max_grad_norm=5,**args):
-        out = self.forward(data,*arg,**args)
-        loss = self.loss_fn(out[l:l+c],label[l:l+c],*arg,**args)
-        self._backward(loss,max_grad_norm)
-        return loss
+from models.genmodel import GenerateModel
 
 
 def main():
@@ -60,8 +48,7 @@ def main():
     parser.add_argument("-dataPath", default='', type=str, help="path of data files")
     parser.add_argument("-train_config")
     parser.add_argument("-data_config")
-    parser.add_argument("-data_type",type=str,default="wav",help="data type input")
-    parser.add_argument("-model", type=str, default="models.LSTMnetAM", help="the model from which you want to resume training")
+
     parser.add_argument("-lr", default=0.0001, type=float, help="Override the LR in the config")
     parser.add_argument("-batch_size", default=32, type=int, help="Override the batch size in the config")
     parser.add_argument("-data_loader_threads", default=0, type=int, help="number of workers for data loading")
@@ -103,12 +90,8 @@ def main():
 
     if not os.path.isdir(args.exp_dir):
         os.makedirs(args.exp_dir)
-    if args.data_type == "wav":
-        trainset = SpeechDataset(config)
-    elif args.data_type == "feat":
-        trainset = FeatDataSet(config)
-    else:
-        raise TypeError("only wav or feat data_type")
+
+    trainset = FeatDataSet(config)
     train_dataloader = ChunkDataloader(trainset,
                                        batch_size=args.batch_size,
                                        distributed=args.hvd,
@@ -131,26 +114,36 @@ def main():
 
     # ceate model
     model_config = config["model_config"]
-    model = GenerateModel(model_config)
+    model = LSTMStack(model_config["input_size"],model_config["hidden_size"],model_config["num_layers"],model_config["dropout"],model_config["bidirectional"])
+    out_layer1 = th.nn.Linear(2*model_config["hidden_size"],4*model_config["hidden_size"],True)
+    action = th.nn.ReLU(True)
+    out_layer2 = th.nn.Linear(4*model_config["hidden_size"],model_config["input_size"],True)
+    out_layer = th.nn.Sequential(out_layer1,action,out_layer2)
+    #all_model = th.nn.Sequential(model,out_layer)
     # Start training
     th.backends.cudnn.enabled = True
     if th.cuda.is_available():
         model.cuda()
+        out_layer.cuda()
 
     # optimizer
-    optimizer = th.optim.Adam(model.parameters(), lr=args.lr, amsgrad=True)
+    optimizer = th.optim.Adam([
+                {'params': model.parameters()},
+                {'params': out_layer.parameters(), 'lr': 1e-4}
+            ], lr=args.lr, amsgrad=True)
 
     if args.hvd:
         # Broadcast parameters and opterimizer state from rank 0 to all other processes.
         hvd.broadcast_parameters(model.state_dict(), root_rank=0)
+        hvd.broadcast_parameters(out_layer.state_dict(), root_rank=0)
         hvd.broadcast_optimizer_state(optimizer, root_rank=0)
 
         # Add Horovod Distributed Optimizer
         optimizer = hvd.DistributedOptimizer(optimizer, named_parameters=model.named_parameters())
 
     # criterion
-    criterion = SeqCrossEntorpy(ignore_index=-100)
-    trainer = Chunk_Trainer(model,criterion,optimizer)
+    criterion = nn.CrossEntropyLoss(ignore_index=-100)
+
     start_epoch = 0
     if args.resume_from_model:
 
@@ -163,16 +156,14 @@ def main():
         optimizer.load_state_dict(checkpoint['optimizer'])
         print("=> loaded checkpoint '{}' ".format(args.resume_from_model))
 
-    logger = FileLogger(args.exp_dir+'/run.log','train')
+    model.train()
+    logger = FileLogger(args.exp_dir+'/train.log','train')
     for epoch in range(start_epoch, args.num_epochs):
-
          # aneal learning rate
-        # if epoch > args.anneal_lr_epoch:
-        #     for param_group in trainer.optimizer.param_groups:
-        #         param_group['lr'] *= args.anneal_lr_ratio
         if epoch > args.anneal_lr_epoch:
-            trainer.update_opt(opt_updata,args.anneal_lr_ratio)
-        run_time, loss = run_train_epoch(trainer, train_dataloader, epoch, args ,config)
+            for param_group in optimizer.param_groups:
+                param_group['lr'] *= args.anneal_lr_ratio
+        run_time, loss = run_train_epoch(model,out_layer,optimizer, criterion, train_dataloader, epoch, args)
         # save model
         if not args.hvd or hvd.rank()== 0:
             checkpoint={}
@@ -183,12 +174,18 @@ def main():
             th.save(checkpoint, output_file)
             s = 'epoch%d: Time %6.3f Loss %.4e\n' % (epoch, run_time, loss)
             logger.info(s)
-            # with open(args.exp_dir+'/run.log','a') as f:
-            #     s = 'epoch%d: Time %6.3f Loss %.4e\n' % (epoch, run_time, loss)
-            #     f.write(s)
 
-def run_train_epoch(trainer, train_dataloader, epoch, args, config):
+
+def random_mask(data,p,fill_data=0):
+    sh = np.shape(data)
+    mask = np.random.rand(*sh) < p
+    data[mask] = 0
+    return data,mask
+
+
+def run_train_epoch(model, out_layer, optimizer, criterion, train_dataloader, epoch, args):
     batch_time = utils.AverageMeter('Time', ':6.3f')
+    #data_time = utils.AverageMeter('Data', ':6.3f')
     losses = utils.AverageMeter('Loss', ':.4e')
     grad_norm = utils.AverageMeter('grad_norm', ':.4e')
     progress = utils.ProgressMeter(len(train_dataloader), batch_time, losses, grad_norm,
@@ -196,24 +193,31 @@ def run_train_epoch(trainer, train_dataloader, epoch, args, config):
 
     end = time.time()
     # trainloader is an iterator. This line extract one minibatch at one time
-    left = config['data_config']['left']
-    center = config['data_config']['center']
-    right = config['data_config']['right']
     for i, data in enumerate(train_dataloader, 0):
         feat = data["x"]
-        label = data["y"]
-
         x = feat.to(th.float32)
-        y = label.unsqueeze(2).long()
-
+        mx,mask = random_mask(x.detach().numpy(),0.15)
+        mx = th.from_numpy(mx).float()
         if th.cuda.is_available():
-            x = x.cuda()
-            y = y.cuda()
-
-        loss = trainer.train_batch(x,y,left,center,right)
+            mx = mx.cuda()
+        out,_ = model(mx)
+        out = out_layer(out)
+        mask = th.from_numpy((~mask).astype(np.uint8)).cuda()
+        loss = (x.cuda() - out).masked_fill(mask,0)
+        loss = th.norm(loss)
+        optimizer.zero_grad()
+        loss.backward()
+        # Gradient Clipping
+        norm = nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
+        optimizer.step()
+        grad_norm.update(norm)
+        # update loss
         losses.update(loss.item(), x.size(0))
+        # measure elapsed time
         batch_time.update(time.time() - end)
+
         if i % args.print_freq == 0:
+    #        if not args.hvd or hvd.rank() == 0:
             progress.print(i)
     return time.time()-end,losses.avg
 

@@ -30,6 +30,12 @@ class FeatDataSet(data.Dataset):
         for i in range(len(utt_data_wav)):#travel different data source
             assert len(utt_data_wav[i])==len(utt_label_wav[i]) #check the label seq has same length with the feat seq
             for j in range(len(utt_data_wav[i])):#travel different wavfile 
+                padxl = np.zeros(config['data_config']['left'],np.shape(utt_data_wav[i][j])[-1])
+                padyl = np.zeros(config['data_config']['left'])
+                padxr = np.zeros(config['data_config']['right'],np.shape(utt_data_wav[i][j])[-1])
+                padyr = np.zeros(config['data_config']['right'])
+                utt_data_wav[i][j] = np.concatenate([padxl,utt_data_wav[i][j],padxr],axis=0)
+                utt_label_wav[i][j][0] = np.concatenate([padyl,utt_label_wav[i][j][0],padyr],axis=0)
                 self.train_samples+=self.generate_list(utt_id_wav[i][j],utt_data_wav[i][j],utt_label_wav[i][j][0],aux_label=None)
 
     def _load_streams(self, source_list, data_path, is_speech=True, is_rir=False):
