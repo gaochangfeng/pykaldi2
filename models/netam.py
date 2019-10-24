@@ -52,12 +52,12 @@ class LSTMnetAM(BaseAM):
         self.output_size = output_size
         self.output_layer = nn.Linear(self.hidden_size, output_size)
 
-    def forward(self, data):
+    def forward(self, data,*arg,**args):
         nnet_output, (h,c) = self.lstm(data)
         output = self.output_layer(nnet_output)
         return output
 
-    def recognize(self, data):
+    def recognize(self, data,*arg,**args):
         output = self.forward(data)
         output = th.log_softmax(output,-1)
         return output
@@ -78,12 +78,12 @@ class TransformerAN(BaseAM):
         )
         self.output_layer = nn.Linear(hidden_size, output_size)
 
-    def forward(self,data,mask=None):
+    def forward(self,data,mask=None,*arg,**args):
         output,mask = self.trans(data,mask)
         output = self.output_layer(output)
         return output
 
-    def recognize(self,data,mask=None):
+    def recognize(self,data,mask=None,*arg,**args):
         output = self.forward(data,mask)
         output = th.log_softmax(output,-1)
 

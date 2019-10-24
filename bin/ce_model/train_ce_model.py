@@ -49,7 +49,7 @@ def opt_updata(optimizer,rate):
 class Chunk_Trainer(Trainer):
     def train_batch(self,data,label,l,c,r,*arg,max_grad_norm=5,**args):
         out = self.forward(data,*arg,**args)
-        loss = self.loss_fn(out[l:l+c],label[l:l+c],*arg,**args)
+        loss = self.loss_fn(out[:,l:l+c],label[:,l:l+c],*arg,**args)
         self._backward(loss,max_grad_norm)
         return loss
 

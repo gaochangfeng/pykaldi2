@@ -9,7 +9,7 @@ from kaldi.util.options import ParseOptions
 from kaldi.util.table import (MatrixWriter, RandomAccessFloatReaderMapped,
                               SequentialWaveReader)
 
-
+#compute-mfcc-feats.py scp:scps/wav1.scp ark,scp:feat/foo.ark,feat/foo.scp
 def compute_mfcc_feats(wav_rspecifier, feats_wspecifier, opts, mfcc_opts):
     mfcc = Mfcc(mfcc_opts)
 
