@@ -6,27 +6,27 @@ import os
 from data.sr_dataset import _utt2seg
 from kaldi_io import read_mat_scp
 from reader.stream import my_cat
+from reader.kaldi_reader import Read_KaldiFeat
 
 
 class FeatDataSet(data.Dataset):
-    def __init__(self, config):
-        print("init")
-        self._config = config
-        self.seg_len = config['data_config']['seg_len']
-        self.seg_shift = config['data_config']['seg_shift']
+    def __init__(self, seg_len, seg_shift):
+        #print("init")
+        #self._config = config
+        self.seg_len = seg_len
+        self.seg_shift = seg_shift
         self.feat_buff = None
         self.label_buff = None
         self.utt_name = None
         self.aux_label = None
         self.train_samples = []
-        self.load_ark_file(config)
         
 
-    def load_ark_file(self,config):
-        print("load")
+    def load_ark_file(self,source_paths,data_path=""):
+        #print("load")
         # self.feat_buff = np.random.rand(10000,13)
         # self.label_buff = np.random.randint(low=0,high=1,size=[10000])
-        utt_id_wav,utt_data_wav,utt_label_wav = self._load_streams(config["source_paths"], config['data_path'], is_speech=True, is_rir=False)
+        utt_id_wav,utt_data_wav,utt_label_wav = self._load_streams(source_paths, data_path, is_speech=True, is_rir=False)
         for i in range(len(utt_data_wav)):#travel different data source
             assert len(utt_data_wav[i])==len(utt_label_wav[i]) #check the label seq has same length with the feat seq
             for j in range(len(utt_data_wav[i])):#travel different wavfile 
@@ -65,17 +65,18 @@ class FeatDataSet(data.Dataset):
                 corpus_label_path = None
             print("%s::_load_streams: loading %s from %s..." % (self.__class__.__name__, corpus_type, corpus_wav_path))
             utt_name, feat_data = zip(*read_mat_scp(corpus_wav_path))
+            utt_name, feat_data = Read_KaldiFeat(corpus_wav_path)
             utt_id_wav.append(utt_name)
             utt_data_wav.append(list(feat_data))
         
         for i in range(len(label_paths)):
             given_utt_id = set(utt_id_wav[i])
-            print(label_paths[i],"given utt:",len(utt_id_wav[i]))
+            #print(label_paths[i],"given utt:",len(utt_id_wav[i]))
             lines = my_cat(label_paths[i])
             lines.sort()        # each lines start with utterance ID, hence effectively sort the labels with utterance ID.
             curr_utt_id_label = [i.split(" ")[0] for i in lines]
             selected_utt_id = set(curr_utt_id_label) & given_utt_id
-            print("select utt:",len(selected_utt_id))
+            #print("select utt:",len(selected_utt_id))
             if len(selected_utt_id)!=len(given_utt_id):
                 print(given_utt_id-selected_utt_id,"is not exist in label file")
             # selected_utt_id = set(curr_utt_id_label)
@@ -91,21 +92,12 @@ class FeatDataSet(data.Dataset):
             minlen = min(len(feat_buff),len(label_buff))
             feat_buff = feat_buff[:minlen]
             label_buff = label_buff[:minlen]
-        if self._config['data_config']['sequence_mode']:
-            if self._config.load_label:
-                train_samples = [(feat_buff, utt_id, label_buff, aux_label)]
-            else:
-                train_samples = [(feat_buff, utt_id)]
-        else: 
-            fbank_seg = _utt2seg(feat_buff.T, self.seg_len, self.seg_shift)
-            if len(fbank_seg) == 0:
-                return []
-
-            if self._config['data_config']['load_label']:
-                label_seg = _utt2seg(label_buff.T, self.seg_len, self.seg_shift)
-                train_samples = [(fbank_seg[i].T, utt_id, label_seg[i].T) for i in range(len(label_seg))]
-            else:
-                train_samples = [(fbank_seg[i].T, utt_id) for i in range(len(fbank_seg))]
+        
+        fbank_seg = _utt2seg(feat_buff.T, self.seg_len, self.seg_shift)
+        if len(fbank_seg) == 0:
+            return []
+        label_seg = _utt2seg(label_buff.T, self.seg_len, self.seg_shift)
+        train_samples = [(fbank_seg[i].T, utt_id, label_seg[i].T) for i in range(len(label_seg))]
         # print(train_samples[0])
         return train_samples
 
